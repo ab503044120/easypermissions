@@ -43,8 +43,6 @@ import java.util.List;
  */
 public class EasyPermissions {
 
-    public static final int SETTINGS_REQ_CODE = 16061;
-
     private static final String TAG = "EasyPermissions";
 
     public interface PermissionCallbacks extends
@@ -158,26 +156,55 @@ public class EasyPermissions {
         }
     }
 
+
+    /**
+     * Check if at least one permission in the list of denied permissions has been permanently
+     * denied (user clicked "Never ask again").
+     * @param object Activity or Fragment requesting permissions.
+     * @param deniedPermissions list of denied permissions, usually from
+     *        {@link PermissionCallbacks#onPermissionsDenied(int, List)}
+     * @return {@code true} if at least one permission in the list was permanently denied.
+     */
+    public static boolean somePermissionPermanentlyDenied(Object object,
+                                                          List<String> deniedPermissions) {
+        for (String deniedPermission : deniedPermissions) {
+            if (permissionPermanentlyDenied(object, deniedPermission)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+
+    /**
+     * Check if a permission has been permanently denied (user clicked "Never ask again").
+     * @param object Activity or Fragment requesting permissions.
+     * @param deniedPermission denied permission.
+     * @return {@code true} if the permissions has been permanently denied.
+     */
+    public static boolean permissionPermanentlyDenied(Object object, String deniedPermission) {
+        return !shouldShowRequestPermissionRationale(object, deniedPermission);
+    }
+
+
     /**
      * Handle the result of a permission request, should be called from the calling Activity's
      * {@link android.support.v4.app.ActivityCompat.OnRequestPermissionsResultCallback#onRequestPermissionsResult(int, String[], int[])}
      * method.
      * <p>
-     * If any permissions were granted or denied, the Activity will receive the appropriate
+     * If any permissions were granted or denied, the {@code object} will receive the appropriate
      * callbacks through {@link PermissionCallbacks} and methods annotated with
      * {@link AfterPermissionGranted} will be run if appropriate.
      *
      * @param requestCode  requestCode argument to permission result callback.
      * @param permissions  permissions argument to permission result callback.
      * @param grantResults grantResults argument to permission result callback.
-     * @param object       the calling Activity or Fragment.
-     * @throws IllegalArgumentException if the calling Activity does not implement
-     *                                  {@link PermissionCallbacks}.
+     * @param receivers    an array of objects that have a method annotated with {@link AfterPermissionGranted}
+     *                     or implement {@link PermissionCallbacks}.
      */
     public static void onRequestPermissionsResult(int requestCode, String[] permissions,
-                                                  int[] grantResults, Object object) {
-
-        checkCallingObjectSuitability(object);
+                                                  int[] grantResults, Object... receivers) {
 
         // Make a collection of granted and denied permissions from the request.
         ArrayList<String> granted = new ArrayList<>();
@@ -191,93 +218,28 @@ public class EasyPermissions {
             }
         }
 
-        // Report granted permissions, if any.
-        if (!granted.isEmpty()) {
-            // Notify callbacks
-            if (object instanceof PermissionCallbacks) {
-                ((PermissionCallbacks) object).onPermissionsGranted(requestCode, granted);
-            }
-        }
-
-        // Report denied permissions, if any.
-        if (!denied.isEmpty()) {
-            if (object instanceof PermissionCallbacks) {
-                ((PermissionCallbacks) object).onPermissionsDenied(requestCode, denied);
-            }
-        }
-
-        // If 100% successful, call annotated methods
-        if (!granted.isEmpty() && denied.isEmpty()) {
-            runAnnotatedMethods(object, requestCode);
-        }
-    }
-
-    /**
-     * Calls {@link #checkDeniedPermissionsNeverAskAgain(Object, String, int, int, DialogInterface.OnClickListener, List)}
-     * with a {@code null} argument for the negatieb buttonOnClickListener.
-     */
-    public static boolean checkDeniedPermissionsNeverAskAgain(final Object object,
-                                                              String rationale,
-                                                              @StringRes int positiveButton,
-                                                              @StringRes int negativeButton,
-                                                              List<String> deniedPerms) {
-        return checkDeniedPermissionsNeverAskAgain(object, rationale,
-                positiveButton, negativeButton, null, deniedPerms);
-    }
-
-    /**
-     * If user denied permissions with the flag NEVER ASK AGAIN, open a dialog explaining the
-     * permissions rationale again and directing the user to the app settings. After the user
-     * returned to the app, {@link Activity#onActivityResult(int, int, Intent)} or
-     * {@link Fragment#onActivityResult(int, int, Intent)} or
-     * {@link android.app.Fragment#onActivityResult(int, int, Intent)} will be called with
-     * {@value #SETTINGS_REQ_CODE} as requestCode
-     * <p>
-     * NOTE: use of this method is optional, should be called from
-     * {@link PermissionCallbacks#onPermissionsDenied(int, List)}
-     *
-     * @param object                        the calling Activity or Fragment.
-     * @param deniedPerms                   the set of denied permissions.
-     * @param negativeButtonOnClickListener negative button on click listener. If the
-     *                                      user click the negative button, then this listener will
-     *                                      be called. Pass null if you don't want to handle it.
-     * @return {@code true} if user denied at least one permission with the flag NEVER ASK AGAIN.
-     */
-    public static boolean checkDeniedPermissionsNeverAskAgain(final Object object,
-                                                              String rationale,
-                                                              @StringRes int positiveButton,
-                                                              @StringRes int negativeButton,
-                                                              @Nullable DialogInterface.OnClickListener negativeButtonOnClickListener,
-                                                              List<String> deniedPerms) {
-        boolean shouldShowRationale;
-        for (String perm : deniedPerms) {
-            shouldShowRationale = shouldShowRequestPermissionRationale(object, perm);
-            if (!shouldShowRationale) {
-                final Activity activity = getActivity(object);
-                if (null == activity) {
-                    return true;
+        // iterate through all receivers
+        for (Object object : receivers) {
+            // Report granted permissions, if any.
+            if (!granted.isEmpty()) {
+                if (object instanceof PermissionCallbacks) {
+                    ((PermissionCallbacks) object).onPermissionsGranted(requestCode, granted);
                 }
+            }
 
-                AlertDialog dialog = new AlertDialog.Builder(activity)
-                        .setMessage(rationale)
-                        .setPositiveButton(positiveButton, new DialogInterface.OnClickListener() {
-                            @Override
-                            public void onClick(DialogInterface dialog, int which) {
-                                Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
-                                Uri uri = Uri.fromParts("package", activity.getPackageName(), null);
-                                intent.setData(uri);
-                                startAppSettingsScreen(object, intent);
-                            }
-                        })
-                        .setNegativeButton(negativeButton, negativeButtonOnClickListener)
-                        .create();
-                dialog.show();
+            // Report denied permissions, if any.
+            if (!denied.isEmpty()) {
+                if (object instanceof PermissionCallbacks) {
+                    ((PermissionCallbacks) object).onPermissionsDenied(requestCode, denied);
+                }
+            }
 
-                return true;
+            // If 100% successful, call annotated methods
+            if (!granted.isEmpty() && denied.isEmpty()) {
+                runAnnotatedMethods(object, requestCode);
             }
         }
 
-        return false;
     }
 
     @TargetApi(23)
@@ -319,18 +281,6 @@ public class EasyPermissions {
         }
     }
 
-    @TargetApi(11)
-    private static void startAppSettingsScreen(Object object,
-                                               Intent intent) {
-        if (object instanceof Activity) {
-            ((Activity) object).startActivityForResult(intent, SETTINGS_REQ_CODE);
-        } else if (object instanceof Fragment) {
-            ((Fragment) object).startActivityForResult(intent, SETTINGS_REQ_CODE);
-        } else if (object instanceof android.app.Fragment) {
-            ((android.app.Fragment) object).startActivityForResult(intent, SETTINGS_REQ_CODE);
-        }
-    }
-
     private static void runAnnotatedMethods(Object object, int requestCode) {
         Class clazz = object.getClass();
         if (isUsingAndroidAnnotations(object)) {
@@ -344,7 +294,7 @@ public class EasyPermissions {
                     // Method must be void so that we can invoke it
                     if (method.getParameterTypes().length > 0) {
                         throw new RuntimeException(
-                                "Cannot execute non-void method " + method.getName());
+                                "Cannot execute method " + method.getName() + " because it is non-void method and/or has input parameters.");
                     }
 
                     try {

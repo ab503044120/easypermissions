@@ -1,4 +1,4 @@
-# EasyPermissions
+# EasyPermissions [![Build Status][1]][2]
 
 EasyPermissions is a wrapper library to simplify basic system permissions logic when targeting
 Android M or higher.
@@ -9,7 +9,7 @@ EasyPermissions is installed by adding the following dependency to your `build.g
 
 ```java
 dependencies {
-  compile 'pub.devrel:easypermissions:0.1.9'
+    compile 'pub.devrel:easypermissions:0.2.0'
 }
 ```
 
@@ -21,7 +21,6 @@ To begin using EasyPermissions, have your `Activity` (or `Fragment`) override th
 
 ```java
 public class MainActivity extends AppCompatActivity {
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -35,7 +34,6 @@ public class MainActivity extends AppCompatActivity {
         // Forward results to EasyPermissions
         EasyPermissions.onRequestPermissionsResult(requestCode, permissions, grantResults, this);
     }
-
 }
 ```
 
@@ -58,21 +56,21 @@ The example below shows how to request permissions for a method that requires bo
     This can also be achieved by adding logic on the `onPermissionsGranted` callback.
 
 ```java
-    @AfterPermissionGranted(RC_CAMERA_AND_WIFI)
-    private void methodRequiresTwoPermission() {
-        String[] perms = {Manifest.permission.CAMERA, Manifest.permission.CHANGE_WIFI_STATE};
-        if (EasyPermissions.hasPermissions(this, perms)) {
-            // Already have permission, do the thing
-            // ...
-        } else {
-            // Do not have permissions, request them now
-            EasyPermissions.requestPermissions(this, getString(R.string.camera_and_wifi_rationale),
-                    RC_CAMERA_AND_WIFI, perms);
-        }
+@AfterPermissionGranted(RC_CAMERA_AND_WIFI)
+private void methodRequiresTwoPermission() {
+    String[] perms = {Manifest.permission.CAMERA, Manifest.permission.CHANGE_WIFI_STATE};
+    if (EasyPermissions.hasPermissions(this, perms)) {
+        // Already have permission, do the thing
+        // ...
+    } else {
+        // Do not have permissions, request them now
+        EasyPermissions.requestPermissions(this, getString(R.string.camera_and_wifi_rationale),
+                RC_CAMERA_AND_WIFI, perms);
     }
+}
 ```
 
-Optionally, for a finer control, you can have your `Activity` / `Framgment` implement
+Optionally, for a finer control, you can have your `Activity` / `Fragment` implement
 the `PermissionCallbacks` interface.
 
 ```java
@@ -112,48 +110,38 @@ public class MainActivity extends AppCompatActivity
 In some cases your app will not function properly without certain permissions. If the user
 denies these permissions with the "Never Ask Again" option, you will be unable to request
 these permissions from the user and they must be changed in app settings. You can use the
-method `EasyPermissions.checkDeniedPermissionsNeverAskAgain()` to display a dialog to the
+method `EasyPermissions.somePermissionPermanentlyDenied(...)` to display a dialog to the
 user in this situation and direct them to the system setting screen for your app:
 
 ```java
-    @Override
-    public void onPermissionsDenied(int requestCode, List<String> perms) {
-        Log.d(TAG, "onPermissionsDenied:" + requestCode + ":" + perms.size());
+@Override
+public void onPermissionsDenied(int requestCode, List<String> perms) {
+    Log.d(TAG, "onPermissionsDenied:" + requestCode + ":" + perms.size());
 
-        // Handle negative button on click listener. Pass null if you don't want to handle it.
-        DialogInterface.OnClickListener cancelButtonListener = new DialogInterface.OnClickListener() {
-            @Override
-            public void onClick(DialogInterface dialog, int which) {
-                // Let's show a toast
-                Toast.makeText(getContext(), R.string.settings_dialog_canceled, Toast.LENGTH_SHORT)
-                        .show();
-            }
-        };
-
-        // (Optional) Check whether the user denied permissions and checked NEVER ASK AGAIN.
-        // This will display a dialog directing them to enable the permission in app settings.
-        EasyPermissions.checkDeniedPermissionsNeverAskAgain(
-                this,
-                getString(R.string.rationale_ask_again),
-                R.string.setting,
-                R.string.cancel,
-                cancelButtonListener,
-                perms);
+    // (Optional) Check whether the user denied any permissions and checked "NEVER ASK AGAIN."
+    // This will display a dialog directing them to enable the permission in app settings.
+    if (EasyPermissions.somePermissionPermanentlyDenied(this, perms)) {
+        new AppSettingsDialog.Builder(this, getString(R.string.rationale_ask_again))
+                .setTitle(getString(R.string.title_settings_dialog))
+                .setPositiveButton(getString(R.string.setting))
+                .setNegativeButton(getString(R.string.cancel), null /* click listener */)
+                .setRequestCode(RC_SETTINGS_SCREEN)
+                .build()
+                .show();
     }
+}
 
-    @Override
-    public void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
+@Override
+public void onActivityResult(int requestCode, int resultCode, Intent data) {
+    super.onActivityResult(requestCode, resultCode, data);
 
-        // Do something after user returned from app settings screen. User may be
-        // changed/updated the permissions. Let's check whether the user has some permissions or not
-        // after returned from settings screen
-        if (requestCode == EasyPermissions.SETTINGS_REQ_CODE) {
-            boolean hasSomePermissions = EasyPermissions.hasPermissions(
-                    getContext(), somePermissions
-            );
-
-            // Do something with the updated permissions
-        }
+    if (requestCode == RC_SETTINGS_SCREEN) {
+        // Do something after user returned from app settings screen, like showing a Toast.
+        Toast.makeText(this, R.string.returned_from_app_settings_to_activity, Toast.LENGTH_SHORT)
+                .show();
     }
+}
 ```
+
+[1]: https://travis-ci.org/googlesamples/easypermissions.svg?branch=master
+[2]: https://travis-ci.org/googlesamples/easypermissions
